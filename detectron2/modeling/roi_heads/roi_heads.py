@@ -40,6 +40,8 @@ def build_roi_heads(cfg, input_shape):
     Build ROIHeads defined by `cfg.MODEL.ROI_HEADS.NAME`.
     """
     name = cfg.MODEL.ROI_HEADS.NAME
+    print("build roi head input shpae: ", input_shape)
+    print("class: ", ROI_HEADS_REGISTRY.get(name))
     return ROI_HEADS_REGISTRY.get(name)(cfg, input_shape)
 
 
@@ -413,7 +415,7 @@ class Res5ROIHeads(ROIHeads):
             )
             cls._build_res5_block = classmethod(cls._build_res5_block)
 
-        ret["res5"], out_channels = cls._build_res5_block(cfg)
+        ret["res5"], out_channels = cls._build_res5_block(cfg, in_shape = input_shape[in_features[0]].channels)
         ret["box_predictor"] = FastRCNNOutputLayers(
             cfg, ShapeSpec(channels=out_channels, height=1, width=1)
         )
@@ -426,13 +428,18 @@ class Res5ROIHeads(ROIHeads):
         return ret
 
     @classmethod
-    def _build_res5_block(cls, cfg):
+    def _build_res5_block(cls, cfg, in_shape = None):
         # fmt: off
         stage_channel_factor = 2 ** 3  # res5 is 8x res2
         num_groups           = cfg.MODEL.RESNETS.NUM_GROUPS
         width_per_group      = cfg.MODEL.RESNETS.WIDTH_PER_GROUP
         bottleneck_channels  = num_groups * width_per_group * stage_channel_factor
-        out_channels         = cfg.MODEL.RESNETS.RES2_OUT_CHANNELS * stage_channel_factor
+        ## Problematic
+        if in_shape is None:
+            out_channels     = cfg.MODEL.RESNETS.RES2_OUT_CHANNELS * stage_channel_factor // 2
+        else:
+            out_channels     = in_shape ## Why am I doing this????
+        print("build res5 channels: ", out_channels)
         stride_in_1x1        = cfg.MODEL.RESNETS.STRIDE_IN_1X1
         norm                 = cfg.MODEL.RESNETS.NORM
         assert not cfg.MODEL.RESNETS.DEFORM_ON_PER_STAGE[-1], \
@@ -443,13 +450,14 @@ class Res5ROIHeads(ROIHeads):
             BottleneckBlock,
             3,
             stride_per_block=[2, 1, 1],
-            in_channels=out_channels // 2,
+            in_channels=out_channels,
             bottleneck_channels=bottleneck_channels,
             out_channels=out_channels,
             num_groups=num_groups,
             norm=norm,
             stride_in_1x1=stride_in_1x1,
         )
+
         return nn.Sequential(*blocks), out_channels
 
     def _shared_roi_transform(self, features: List[torch.Tensor], boxes: List[Boxes]):

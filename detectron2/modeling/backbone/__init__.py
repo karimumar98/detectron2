@@ -12,6 +12,7 @@ from .resnet import (
     make_stage,
     BottleneckBlock,
 )
+from .clip import CLIPBackbone
 from .vit import ViT, SimpleFeaturePyramid, get_vit_lr_decay_rate
 from .mvit import MViT
 from .swin import SwinTransformer
